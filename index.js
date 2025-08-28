@@ -35,21 +35,28 @@ const manifestTemplate = {
 const genres = require('./genres')
 
 const catalogTemplate = {
-     "type":"movie",
+     "type": "movie",
      "id": "mdblist-list",
      "genres": genres,
      "extra": [
         {
            "name": "genre",
            "options": genres,
+           "isRequired": false
         },
         {
-           "name":"skip"
+           "name": "skip",
+           "isRequired": false
+        },
+        {
+           "name": "search",
+           "isRequired": false
         }
      ],
      "extraSupported": [
         "genre",
-        "skip"
+        "skip",
+        "search"
      ],
      "name": "List"
 }
@@ -236,10 +243,15 @@ function getManifest(req, res, isUnified, isWatchlist) {
 		delete catalogClone.genres
 		catalogClone.extra = [
          {
-           "name":"skip"
+           "name": "skip",
+           "isRequired": false
+         },
+         {
+           "name": "search",
+           "isRequired": false
          }
 		]
-		catalogClone.extraSupported = ["skip"]
+		catalogClone.extraSupported = ["skip", "search"]
 		manifestClone.catalogs = [catalogClone]
 		res.setHeader('Cache-Control', `public, max-age=${24 * 60 * 60}`)
 		res.json(manifestClone)
@@ -431,13 +443,17 @@ function getExternalList(req, res, isUnified) {
 	const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {};
 	const skip = parseInt(extra.skip || 0);
 	const genre = extra.genre;
+	const search = extra.search;
 
 	let url = `https://api.mdblist.com/external/lists/${listId}/items?apikey=${mdbListKey}&limit=${perPage}&offset=${skip}&append_to_response=genre`;
 	if (genre) {
 		url += `&filter_genre=${encodeURIComponent(genre.toLowerCase())}`;
 	}
+	if (search) {
+		url += `&filter_title=${encodeURIComponent(search)}`;
+	}
 	if (isUnified) {
-		url += `&unified=true`
+		url += `&unified=true`;
 	}
 	needle.get(url, { follow_max: 3 }, (err, resp, mdbBody) => {
 		if (!err && resp.statusCode === 200) {
@@ -446,7 +462,7 @@ function getExternalList(req, res, isUnified) {
 				return;
 			} else {
 				const mdbType = type === 'movie' ? 'movies' : 'shows';
-				const body = ((mdbBody || {})[mdbType] || []).length ? mdbBody[mdbType] : mdbBody; // Fallback to raw body if no movies/shows key
+				const body = ((mdbBody || {})[mdbType] || []).length ? mdbBody[mdbType] : mdbBody;
 				if (Array.isArray(body) && body.length && body[0].title) {
 					res.setHeader('Cache-Control', `public, max-age=${1 * 60 * 60}`);
 					const items = body.filter(el => (!!el.imdb_id && !el.imdb_id.startsWith('tr'))).map(mdbToStremio.bind(null, userKey));
@@ -502,19 +518,24 @@ function getList(req, res, isUnified, isWatchlist) {
 		const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {}
 		const skip = parseInt(extra.skip || 0)
 		const genre = extra.genre
+		const search = extra.search
 		const type = req.params.type
 		const mdbListType = type === 'movie' ? 'movie' : 'show'
 
 		let url = false
 
 		if (!isUnified) {
-			url = `https://api.mdblist.com/watchlist/items/${mdbListType}?apikey=${mdbListKey}&limit=${perPage}&offset=${(skip || 0)}&append_to_response=genre`
+			url = `https://api.mdblist.com/watchlist/items/${mdbListType}?apikey=${mdbListKey}&limit=${perPage}&offset=${skip}&append_to_response=genre`
 			if (genre)
 				url += `&filter_genre=${encodeURIComponent(genre.toLowerCase())}`
+			if (search)
+				url += `&filter_title=${encodeURIComponent(search)}`
 		} else {
-			url = `https://api.mdblist.com/watchlist/items?apikey=${mdbListKey}&limit=${perPage}&offset=${(skip || 0)}&append_to_response=genre`
+			url = `https://api.mdblist.com/watchlist/items?apikey=${mdbListKey}&limit=${perPage}&offset=${skip}&append_to_response=genre`
 			if (genre)
 				url += `&filter_genre=${encodeURIComponent(genre.toLowerCase())}`
+			if (search)
+				url += `&filter_title=${encodeURIComponent(search)}`
 			url += `&unified=true`
 		}
 
@@ -583,19 +604,24 @@ function getList(req, res, isUnified, isWatchlist) {
 		const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {}
 		const skip = parseInt(extra.skip || 0)
 		const genre = extra.genre
+		const search = extra.search
 		const type = req.params.type
 		const mdbListType = type === 'movie' ? 'movie' : 'show'
 
 		let url = false
 
 		if (!isUnified) {
-			url = `https://api.mdblist.com/lists/${user}/${listId}/items/${mdbListType}?apikey=${mdbListKey}&limit=${perPage}&offset=${(skip || 0)}&append_to_response=genre`
+			url = `https://api.mdblist.com/lists/${user}/${listId}/items/${mdbListType}?apikey=${mdbListKey}&limit=${perPage}&offset=${skip}&append_to_response=genre`
 			if (genre)
 				url += `&filter_genre=${encodeURIComponent(genre.toLowerCase())}`
+			if (search)
+				url += `&filter_title=${encodeURIComponent(search)}`
 		} else {
-			url = `https://api.mdblist.com/lists/${user}/${listId}/items?apikey=${mdbListKey}&limit=${perPage}&offset=${(skip || 0)}&append_to_response=genre`
+			url = `https://api.mdblist.com/lists/${user}/${listId}/items?apikey=${mdbListKey}&limit=${perPage}&offset=${skip}&append_to_response=genre`
 			if (genre)
 				url += `&filter_genre=${encodeURIComponent(genre.toLowerCase())}`
+			if (search)
+				url += `&filter_title=${encodeURIComponent(search)}`
 			url += `&unified=true`
 		}
 
@@ -645,7 +671,10 @@ function getList(req, res, isUnified, isWatchlist) {
 		const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {}
 		const skip = parseInt(extra.skip || 0)
 		const type = req.params.type
-		const url = `https://mdblist.com/lists/${demos.username}/${listId}/json?limit=${perPage}&offset=${(skip || 0)}`
+		const search = extra.search
+		const url = `https://mdblist.com/lists/${demos.username}/${listId}/json?limit=${perPage}&offset=${skip}`
+		if (search)
+			url += `&filter_title=${encodeURIComponent(search)}`
 		if (isUnified) {
 			url += `&unified=true`
 		}
@@ -657,7 +686,7 @@ function getList(req, res, isUnified, isWatchlist) {
 		needle.get(url, { follow_max: 3 }, (err, resp, body) => {
 			if (!err && resp.statusCode === 200 && body[0].title) {
 				if (isUnified) {
-					unifiedList(req, res, mdbBody, userKey)
+					unifiedList(req, res, body, userKey)
 					return;
 				}
 				res.setHeader('Cache-Control', `public, max-age=${1 * 60 * 60}`)
@@ -705,11 +734,14 @@ function getList(req, res, isUnified, isWatchlist) {
 		const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {}
 		const skip = parseInt(extra.skip || 0)
 		const genre = extra.genre
+		const search = extra.search
 		const type = req.params.type
 		if (listIds.length === 1) {
-			let url = `https://api.mdblist.com/lists/${listIds[0]}/items/?apikey=${mdbListKey}&limit=${perPage}&offset=${(skip || 0)}&append_to_response=genre`
+			let url = `https://api.mdblist.com/lists/${listIds[0]}/items/?apikey=${mdbListKey}&limit=${perPage}&offset=${skip}&append_to_response=genre`
 			if (genre)
 				url += `&filter_genre=${encodeURIComponent(genre.toLowerCase())}`
+			if (search)
+				url += `&filter_title=${encodeURIComponent(search)}`
 			if (isUnified) {
 				url += `&unified=true`
 			}
